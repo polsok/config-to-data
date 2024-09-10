@@ -6,7 +6,10 @@ import pandas as pd
 import os
 import os.path
 from collections import Counter
+from openpyxl import Workbook
 class Conf:
+    def __init__(self, value=None):
+        self.path = value or ""
     # 1 чистим папку с выводом
     def clearFolder(path):
         # Проверяем, существует ли каталог
@@ -16,14 +19,14 @@ class Conf:
         # Создаем новый пустой каталог
         os.mkdir(path)
     # загружаем статистику и на вывод получаем список файлов в заданной директории
-    def findYamlFiles(directory):
+    def findYamlFiles(self):
         # обходим нужную папку выводим список всех файлов и список уникальных файлов
         files = []
         uniq = []
-        for root, dirs, files_ in os.walk(directory):
+        for root, dirs, files_ in os.walk(self.path):
             for file_ in files_:
                 # Вырезаем общую часть строки
-                output_string = os.path.join(root, file_).replace(directory + "/", "")
+                output_string = os.path.join(root, file_).replace(self.path + "/", "")
                 # проверяем что ссылка на файл корректна
                 index = output_string.find('/')
                 if index != -1:
@@ -41,11 +44,11 @@ class Conf:
             with open("stats/name.txt", "a") as file:
                 file.write(f"{name_file}\n")
         return files
-    def check_rules(directory, files, rules):
+    def check_rules(self, files, rules):
         datas = []
         for file_ in files:
             # Вырезаем общую часть строки
-            output_string = file_.replace(directory, "")
+            output_string = file_.replace(self.path, "")
             # проверка, что первый символ косая черта
             if output_string[0] == '/':
                 output_string = output_string[1:]
@@ -110,6 +113,7 @@ class Conf:
         # Выводим словарь
         print(data)
         return data
+
     # метод обработки yaml данных
     def GetData(data, prefix):
         if isinstance(data, dict):
@@ -121,20 +125,24 @@ class Conf:
         else:
             yield (prefix, data)
     # метод обработки yaml файлов
-    def GetYamlData(file: str):
+    def GetYamlData(self, file: str):
         with open(file, "r") as f:
             yaml_data = yaml.safe_load(f)
             retval = pd.DataFrame(Conf.GetData(yaml_data, '')).set_index(0)
-            output_string = file.replace("/Users/19901341/.osdf/buildConfigs/", "")
+            output_string = file.replace(self.path + "/", "")
             retval = retval.rename(columns={1:output_string.split('/')[0]})
         return(retval)
-    def get_data(grouped_objects, uniq):
+    def get_data(self, grouped_objects, uniq):
+        # Создаем объект Workbook
+        # wb = Workbook()
         for kind, objects in grouped_objects.items():
             # lines.add(f"сервис, количество ")
             if kind in uniq:
-                df = pd.concat([Conf.GetYamlData(object['full_path']) for object in objects], axis=1)
+                df = pd.concat([Conf.GetYamlData(self, object['full_path']) for object in objects], axis=1)
                 a = df.keys
-                # df.iloc[0, 0] = "ID"
                 df.to_csv(f'results/{kind}.csv', index=True)
+                # сохраняем их в каждом отдельном файле, в один файл не удалось их все добавить
+                with pd.ExcelWriter(f"results/{kind}.xlsx") as writer:
+                    df.to_excel(writer, sheet_name=f'{kind}', startrow=0, header=True, index=True, freeze_panes=(1, 0))
                 # получаем список неизменяемых ключей (ну и сразу их выводим в файлик)
-                unmutable_data = df[df.iloc[:, 1:].eq(df.iloc[:,1], axis=0).all(1)].index
+                # unmutable_data = df[df.iloc[:, 1:].eq(df.iloc[:,1], axis=0).all(1)].index
